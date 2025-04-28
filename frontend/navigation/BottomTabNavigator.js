@@ -8,6 +8,7 @@ import LearnScreen from '../screens/main/LearnScreen';
 import ProfileStack from '../navigation/profileNav'; 
 import UnitStack from '../navigation/unitsNav'; 
 import HomeScreen from '../components/HomeScreen';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 
 const Tab = createBottomTabNavigator();
 
@@ -57,16 +58,21 @@ const BottomTabNavigator = () => {
         headerShown: false,
       })}
     >
-      <Tab.Screen 
-        name="Learn" 
-        component={UnitStack}
-        options={({ route }) => {
-          const routeName = route.state?.routes[route.state.index]?.name;
-          return {
-            tabBarLabel: 'Learn',
-            tabBarVisible: routeName === 'LearnScreen',
-          };
-        }}
+      <Tab.Screen
+  name="Learn"
+  component={UnitStack}
+  options={({ route }) => {
+    const routeName = getFocusedRouteNameFromRoute(route) ?? 'LearnScreen';
+    const hideTabBarScreens = ['Lessons', 'LessonDetail', 'quizScreen', 'quizResults'];
+
+    if (hideTabBarScreens.includes(routeName)) {
+      return {
+        tabBarStyle: { display: 'none' },
+      };
+    }
+    return {};
+  }}
+
       />
       <Tab.Screen 
         name="Forum" 

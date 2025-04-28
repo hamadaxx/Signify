@@ -9,63 +9,54 @@ import {
   Dimensions,
   Alert,
 } from "react-native";
-import { WebView } from 'react-native-webview';
+import YoutubePlayer from 'react-native-youtube-iframe';
 import { Ionicons } from "@expo/vector-icons";
-import { db } from "../../firebase/fbConfig";
-import { doc, updateDoc, onSnapshot, collection, query, orderBy, getDoc, getDocs } from "firebase/firestore";
+import { fetchVideo, fetchVideos } from "../../firebase/vidServices"; // ✅ Notice: fetchVideo and fetchVideos
 import { useProgress } from "../../contexts/ProgressContext";
-import { Timestamp } from "firebase/firestore";
-import { fetchVideos } from "../../firebase/vidServices";
 
 const { width } = Dimensions.get('window');
 
 const LessonDetail = ({ route, navigation }) => {
-  const { videoId, unitId, videoTitle, videoUrl, description } = route.params;
-  const [loading, setLoading] = useState(false);
+  const { unitId, videoId } = route.params;
+
+  const [loading, setLoading] = useState(true);
   const [watched, setWatched] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
+  const [videoTitle, setVideoTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [youtubeVideoId, setYoutubeVideoId] = useState(null);
   const [allVideos, setAllVideos] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+
   const { completeLesson, isLessonCompleted, refreshProgress } = useProgress();
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        // First refresh the progress data
         await refreshProgress();
-        
-        // Check if lesson is completed for this user
-        const completed = isLessonCompleted(videoId);
-        setIsRepeat(completed);
-        setWatched(completed); // Set watched status based on user's progress
 
-        // Load all videos using vidServices
-        const videosData = await fetchVideos(unitId);
-        setAllVideos(videosData);
-        const index = videosData.findIndex(v => v.id === videoId);
+        // Load all videos to navigate between them
+        const videos = await fetchVideos(unitId);
+        setAllVideos(videos);
+
+        const index = videos.findIndex(v => v.id === videoId);
         if (index >= 0) setCurrentIndex(index);
 
-        // Set up real-time listener for videos
-        const videosRef = collection(db, "units", unitId, "videos");
-        const q = query(videosRef, orderBy("vidOrder", "asc"));
-        const unsubscribeVideos = onSnapshot(q, (snapshot) => {
-          const updatedVideos = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-          
-          if (JSON.stringify(updatedVideos) !== JSON.stringify(allVideos)) {
-            setAllVideos(updatedVideos);
-            const newIndex = updatedVideos.findIndex(v => v.id === videoId);
-            if (newIndex >= 0) setCurrentIndex(newIndex);
-          }
-        });
+        // Load the current video details
+        const videoData = await fetchVideo(unitId, videoId);
+        const id = getYouTubeVideoId(videoData.videoURL);
 
-        return () => {
-          unsubscribeVideos();
-        };
+        setVideoTitle(videoData.title || 'Lesson');
+        setDescription(videoData.description || '');
+        setYoutubeVideoId(id);
+
+        const completed = isLessonCompleted(videoId);
+        setIsRepeat(completed);
+        setWatched(completed);
       } catch (error) {
-        console.error("Error loading lesson data:", error);
+        console.error("Error loading video:", error);
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -75,12 +66,9 @@ const LessonDetail = ({ route, navigation }) => {
   const navigateToVideo = useCallback((index) => {
     if (index >= 0 && index < allVideos.length) {
       const video = allVideos[index];
-      navigation.navigate("LessonDetail", {
-        videoId: video.id,
+      navigation.replace("LessonDetail", { // ✅ use replace not navigate to avoid stacking screens
         unitId,
-        videoTitle: video.title,
-        videoUrl: video.videoURL,
-        description: video.description
+        videoId: video.id,
       });
     }
   }, [allVideos, navigation, unitId]);
@@ -88,15 +76,13 @@ const LessonDetail = ({ route, navigation }) => {
   const markAsWatched = useCallback(async () => {
     try {
       setLoading(true);
-      
-      // First check if the lesson is already completed
+
       const alreadyCompleted = isLessonCompleted(videoId);
       if (alreadyCompleted) {
         Alert.alert("Info", "This lesson was already completed!", [{ text: "OK" }]);
         return;
       }
-      
-      // Mark the lesson as completed in the user's progress
+
       const success = await completeLesson(videoId, unitId);
       if (success) {
         setWatched(true);
@@ -113,15 +99,20 @@ const LessonDetail = ({ route, navigation }) => {
     }
   }, [completeLesson, unitId, videoId, isLessonCompleted]);
 
-  const getYouTubeVideoId = useCallback((url) => {
+  const getYouTubeVideoId = (url) => {
     if (!url) return null;
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
-  }, []);
+  };
 
-  const youtubeVideoId = getYouTubeVideoId(videoUrl);
-  const embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`;
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -135,26 +126,22 @@ const LessonDetail = ({ route, navigation }) => {
         <Text style={styles.headerTitle}>{videoTitle}</Text>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
       >
         <View style={styles.videoWrapper}>
           <View style={styles.videoContainer}>
-            <WebView
-              style={styles.video}
-              source={{ uri: embedUrl }}
-              allowsFullscreenVideo
-              javaScriptEnabled
-              mediaPlaybackRequiresUserAction={false}
-              allowsInlineMediaPlayback
-              startInLoadingState
-              renderLoading={() => (
-                <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#3B82F6" />
-                </View>
-              )}
-            />
+            {youtubeVideoId ? (
+              <YoutubePlayer
+                height={(width - 32) * 0.5625}
+                width={width - 32}
+                videoId={youtubeVideoId}
+                play={false}
+              />
+            ) : (
+              <Text>Invalid YouTube link</Text>
+            )}
           </View>
         </View>
 
@@ -182,6 +169,7 @@ const LessonDetail = ({ route, navigation }) => {
           </Text>
         </TouchableOpacity>
 
+        {/* ✅ Next / Previous buttons restored */}
         <View style={styles.navigationButtons}>
           <TouchableOpacity
             style={[styles.navButton, currentIndex === 0 && styles.disabledButton]}
@@ -191,7 +179,7 @@ const LessonDetail = ({ route, navigation }) => {
             <Ionicons name="arrow-back" size={24} color="#3B82F6" />
             <Text style={styles.navButtonText}>Previous</Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[styles.navButton, currentIndex === allVideos.length - 1 && styles.disabledButton]}
             onPress={() => navigateToVideo(currentIndex + 1)}
@@ -201,11 +189,11 @@ const LessonDetail = ({ route, navigation }) => {
             <Ionicons name="arrow-forward" size={24} color="#3B82F6" />
           </TouchableOpacity>
         </View>
+
       </ScrollView>
     </View>
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {
@@ -237,7 +225,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 120,
+    paddingBottom: 90,
+  },
+  videoWrapper: {
+    backgroundColor: '#f8f9fa',
+    padding: 16,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    alignItems: 'center',
   },
   videoContainer: {
     width: width - 32,
@@ -248,32 +248,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 5,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-  },
-  video: {
-    flex: 1,
-    backgroundColor: '#000',
-    transform: [{ scale: 0.98 }],
-  },
-  videoWrapper: {
-    backgroundColor: '#f8f9fa',
-    padding: 16,
-    marginHorizontal: 16,
-    borderRadius: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    alignItems: 'center',
   },
   description: {
     fontSize: 16,
@@ -281,23 +258,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     paddingHorizontal: 16,
     marginTop: 16,
-  },
-  completeButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#3B82F6",
-    borderRadius: 8,
-    padding: 16,
-    margin: 16,
-    marginTop: 24,
-    marginBottom: 40,
-  },
-  completeButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginLeft: 8,
   },
   pointsInfo: {
     flexDirection: "row",
@@ -311,12 +271,27 @@ const styles = StyleSheet.create({
     color: "#666",
     marginLeft: 8,
   },
+  completeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3B82F6",
+    borderRadius: 8,
+    padding: 16,
+    margin: 16,
+    marginTop: 24,
+  },
+  completeButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
   navigationButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginHorizontal: 16,
     marginTop: 16,
-    marginBottom: 40,
   },
   navButton: {
     flexDirection: 'row',

@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
+  ScrollView,
   ActivityIndicator
 } from "react-native";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
@@ -46,26 +47,27 @@ const LearnScreen = () => {
   const { isUnitCompleted, getUnitProgress, refreshProgress } = useProgress();
   const [lastRefresh, setLastRefresh] = useState(Date.now());
 
+
   const fetchUnits = async (forceRefresh = false) => {
     try {
       // Only refresh if forced or if it's been more than 5 minutes since last refresh
       const shouldRefresh = forceRefresh || (Date.now() - lastRefresh > 5 * 60 * 1000);
-      
+
       if (!shouldRefresh) return;
-      
+
       setLoading(true);
       await refreshProgress();
-      
+
       const unitsRef = collection(db, "units");
       const q = query(unitsRef, orderBy("unitOrder", "asc"));
       const querySnapshot = await getDocs(q);
-      
+
       const unitsData = await Promise.all(
         querySnapshot.docs.map(async (doc) => {
           const videosRef = collection(db, "units", doc.id, "videos");
           const videosSnapshot = await getDocs(videosRef);
           const totalVideos = videosSnapshot.size;
-          
+
           const progress = await getUnitProgress(doc.id);
           const completed = isUnitCompleted(doc.id);
 
@@ -113,7 +115,7 @@ const LearnScreen = () => {
     if (unitImages[imagePath]) {
       return unitImages[imagePath];
     }
-    
+
     // Otherwise, return the default image
     return require("../../assets/units/book.png");
   };
@@ -165,10 +167,21 @@ const LearnScreen = () => {
   return (
     <View style={styles.container}>
       <ProgressHeader />
+      {/* Daily Challenge Button */}
+      <TouchableOpacity
+        style={styles.dailyChallengeButton}
+        onPress={() => navigation.navigate('DailyChallenge')}
+        activeOpacity={0.8}
+      >
+
+        <Text style={styles.dailyChallengeText}>🔥 Daily Challenge</Text>
+        <Text style={styles.dailyChallengeSubtitle}>Test your ASL skills today!</Text>
+      </TouchableOpacity>
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
         </View>
+
       ) : units.length > 0 ? (
         <FlatList
           data={units}
@@ -192,6 +205,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  dailyChallengeButton: {
+    backgroundColor: '#ffe066',
+    marginHorizontal: 20,
+    marginVertical: 10,
+    paddingVertical: 20,
+    paddingHorizontal: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+  },
+  dailyChallengeText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  dailyChallengeSubtitle: {
+    fontSize: 14,
+    color: '#555',
   },
   loadingContainer: {
     flex: 1,

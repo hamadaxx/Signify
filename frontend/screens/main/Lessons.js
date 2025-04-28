@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { db } from "../../firebase/fbConfig";
-import { collection, query, orderBy, onSnapshot, getDocs } from "firebase/firestore";
+import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useProgress } from "../../contexts/ProgressContext";
@@ -18,7 +18,15 @@ const Lessons = ({ route }) => {
   const navigation = useNavigation();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { isLessonCompleted, isQuizCompleted, getQuizScore, refreshProgress } = useProgress();
+  const { isLessonCompleted, isQuizCompleted, getQuizScore } = useProgress();
+
+  // Set the page title in the navigation header
+  useEffect(() => {
+    navigation.setOptions({
+      title: unitTitle,
+      headerBackTitleVisible: false,
+    });
+  }, [navigation, unitTitle]);
 
   useEffect(() => {
     let unsubscribe;
@@ -96,10 +104,6 @@ const Lessons = ({ route }) => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{unitTitle}</Text>
-      </View>
-
       {loading ? (
         <ActivityIndicator size="large" color="#3B82F6" />
       ) : (
@@ -145,16 +149,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#fff",
   },
-  header: {
-    backgroundColor: "#ADD8E6",
-    padding: 20,
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
   listContainer: {
     padding: 16,
   },
@@ -181,7 +175,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: "#e0e0e0",
-    marginBottom: 60,
   },
   quizButton: {
     flexDirection: "row",

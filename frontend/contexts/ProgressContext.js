@@ -274,49 +274,58 @@ export const ProgressProvider = ({ children }) => {
 
   const completeQuiz = async (unitId, score) => {
     if (!user) return false;
-    
+  
     try {
       const userRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userRef);
-      
+  
       if (!userDoc.exists()) {
         console.error('User document does not exist');
         return false;
       }
-      
+  
       const userData = userDoc.data();
       const progress = userData.progress || {};
       const completedQuizzes = progress.completedQuizzes || [];
-      
-      const alreadyCompleted = completedQuizzes.some(quiz => quiz.unitId === unitId);
-      
-      if (!alreadyCompleted) {
-        const newCompletedQuiz = {
+  
+      const existingQuizIndex = completedQuizzes.findIndex(quiz => quiz.unitId === unitId);
+  
+      if (existingQuizIndex === -1) {
+        // First attempt
+        completedQuizzes.push({
           unitId,
-          score,
+          previousScore: null,
+          latestScore: score,
+          completedAt: Timestamp.now()
+        });
+      } else {
+        // Retake
+        const previousLatestScore = completedQuizzes[existingQuizIndex].latestScore;
+        completedQuizzes[existingQuizIndex] = {
+          unitId,
+          previousScore: previousLatestScore,
+          latestScore: score,
           completedAt: Timestamp.now()
         };
-        
-        await updateDoc(userRef, {
-          'progress.completedQuizzes': [...completedQuizzes, newCompletedQuiz],
-          'progress.points': increment(POINTS.QUIZ_COMPLETION)
-        });
-        
-        setUserProgress(prev => ({
-          ...prev,
-          completedQuizzes: [...(prev?.completedQuizzes || []), newCompletedQuiz],
-          points: (prev?.points || 0) + POINTS.QUIZ_COMPLETION
-        }));
-        
-        return true;
       }
-      
-      return false;
+  
+      await updateDoc(userRef, {
+        'progress.completedQuizzes': completedQuizzes
+      });
+  
+      setUserProgress(prev => ({
+        ...prev,
+        completedQuizzes: completedQuizzes
+      }));
+  
+      return true;
     } catch (error) {
       console.error('Error completing quiz:', error);
       return false;
     }
   };
+  
+
 
   const isLessonCompleted = (lessonId) => {
     if (!userProgress?.completedLessons) return false;
@@ -336,7 +345,7 @@ export const ProgressProvider = ({ children }) => {
   const getQuizScore = (unitId) => {
     if (!userProgress?.completedQuizzes) return null;
     const quiz = userProgress.completedQuizzes.find(quiz => quiz.unitId === unitId);
-    return quiz ? quiz.score : null;
+    return quiz ? quiz.previousScore : null;
   };
 
   const getUnitProgress = async (unitId) => {

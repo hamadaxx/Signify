@@ -404,7 +404,6 @@ const styles = StyleSheet.create({
   prevButton: {
     backgroundColor: '#f0f0f0',
     marginRight: 8,
-    marginBottom: 60,
   },
   nextButton: {
     backgroundColor: '#3B82F6',

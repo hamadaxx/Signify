@@ -2,6 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProgress } from '../../contexts/ProgressContext';
+import YoutubePlayer from 'react-native-youtube-iframe';
+
 
 const quizResults = ({ route, navigation }) => {
   const { questions, selectedAnswers, score, unitTitle, unitId } = route.params;
@@ -40,32 +42,35 @@ const quizResults = ({ route, navigation }) => {
           </Text>
         )}
       </View>
-      
+
       <View style={styles.resultsContainer}>
         {questions.map((question, index) => {
           const isCorrect = selectedAnswers[index] === question.correctAnswer;
           return (
-            <View 
-              key={index} 
+            <View
+              key={index}
               style={[
-                styles.questionResult, 
+                styles.questionResult,
                 isCorrect ? styles.correct : styles.incorrect
               ]}
             >
               <Text style={styles.questionNumber}>Question {index + 1}</Text>
               <Text style={styles.questionText}>{question.question}</Text>
-              
+
               {question.videoURL && (
                 <View style={styles.videoContainer}>
                   <Text style={styles.videoLabel}>Video Reference:</Text>
                   <YoutubePlayer
-                    height={180}
-                    videoId={getYouTubeVideoId(question.videoURL)}
+                    key={youtubeVideoId}   // force re-render when ID available
+                    height={(width - 32) * 0.5625}
+                    width={width - 32}
+                    videoId={youtubeVideoId}
                     play={false}
                   />
+
                 </View>
               )}
-              
+
               <View style={styles.answerContainer}>
                 <Text style={styles.answerLabel}>Your Answer:</Text>
                 <Text style={[
@@ -75,7 +80,7 @@ const quizResults = ({ route, navigation }) => {
                   {selectedAnswers[index] || 'Not answered'}
                 </Text>
               </View>
-              
+
               {!isCorrect && (
                 <View style={styles.correctAnswerContainer}>
                   <Text style={styles.correctAnswerLabel}>Correct Answer:</Text>
@@ -105,6 +110,7 @@ const getYouTubeVideoId = (url) => {
   const match = url.match(regExp);
   return match ? match[1] : null;
 };
+
 
 const styles = StyleSheet.create({
   container: {
