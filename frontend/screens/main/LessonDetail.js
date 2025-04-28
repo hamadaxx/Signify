@@ -1,0 +1,340 @@
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+  Dimensions,
+  Alert,
+} from "react-native";
+import { WebView } from 'react-native-webview';
+import { Ionicons } from "@expo/vector-icons";
+import { db } from "../../firebase/fbConfig";
+import { doc, updateDoc, onSnapshot, collection, query, orderBy, getDoc, getDocs } from "firebase/firestore";
+import { useProgress } from "../../contexts/ProgressContext";
+import { Timestamp } from "firebase/firestore";
+
+const { width } = Dimensions.get('window');
+
+const LessonDetail = ({ route, navigation }) => {
+  const { videoId, unitId, videoTitle, videoUrl, description } = route.params;
+  const [loading, setLoading] = useState(false);
+  const [watched, setWatched] = useState(false);
+  const [isRepeat, setIsRepeat] = useState(false);
+  const [allVideos, setAllVideos] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const { completeLesson, isLessonCompleted, refreshProgress } = useProgress();
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // First refresh the progress data
+        await refreshProgress();
+        
+        // Check if lesson is completed for this user
+        const completed = isLessonCompleted(videoId);
+        setIsRepeat(completed);
+        setWatched(completed); // Set watched status based on user's progress
+
+        // Load all videos
+        const videosRef = collection(db, "units", unitId, "videos");
+        const q = query(videosRef, orderBy("vidOrder", "asc"));
+        const videosSnapshot = await getDocs(q);
+        
+        const videosData = videosSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        
+        setAllVideos(videosData);
+        const index = videosData.findIndex(v => v.id === videoId);
+        if (index >= 0) setCurrentIndex(index);
+
+        // Set up real-time listener for videos
+        const unsubscribeVideos = onSnapshot(q, (snapshot) => {
+          const updatedVideos = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
+          
+          if (JSON.stringify(updatedVideos) !== JSON.stringify(allVideos)) {
+            setAllVideos(updatedVideos);
+            const newIndex = updatedVideos.findIndex(v => v.id === videoId);
+            if (newIndex >= 0) setCurrentIndex(newIndex);
+          }
+        });
+
+        return () => {
+          unsubscribeVideos();
+        };
+      } catch (error) {
+        console.error("Error loading lesson data:", error);
+      }
+    };
+
+    loadData();
+  }, [unitId, videoId, isLessonCompleted, refreshProgress]);
+
+  const navigateToVideo = useCallback((index) => {
+    if (index >= 0 && index < allVideos.length) {
+      const video = allVideos[index];
+      navigation.navigate("LessonDetail", {
+        videoId: video.id,
+        unitId,
+        videoTitle: video.title,
+        videoUrl: video.videoURL,
+        description: video.description
+      });
+    }
+  }, [allVideos, navigation, unitId]);
+
+  const markAsWatched = useCallback(async () => {
+    try {
+      setLoading(true);
+      
+      // First check if the lesson is already completed
+      const alreadyCompleted = isLessonCompleted(videoId);
+      if (alreadyCompleted) {
+        Alert.alert("Info", "This lesson was already completed!", [{ text: "OK" }]);
+        return;
+      }
+      
+      // Mark the lesson as completed in the user's progress
+      const success = await completeLesson(videoId, unitId);
+      if (success) {
+        setWatched(true);
+        setIsRepeat(true);
+        Alert.alert("Success", "Lesson marked as completed!", [{ text: "OK" }]);
+      } else {
+        Alert.alert("Error", "Failed to mark lesson as completed.", [{ text: "OK" }]);
+      }
+    } catch (error) {
+      console.error("Error marking as watched:", error);
+      Alert.alert("Error", "Failed to mark lesson as completed.", [{ text: "OK" }]);
+    } finally {
+      setLoading(false);
+    }
+  }, [completeLesson, unitId, videoId, isLessonCompleted]);
+
+  const getYouTubeVideoId = useCallback((url) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  }, []);
+
+  const youtubeVideoId = getYouTubeVideoId(videoUrl);
+  const embedUrl = `https://www.youtube.com/embed/${youtubeVideoId}?autoplay=1&rel=0&modestbranding=1&playsinline=1`;
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color="#333" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{videoTitle}</Text>
+      </View>
+
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+      >
+        <View style={styles.videoWrapper}>
+          <View style={styles.videoContainer}>
+            <WebView
+              style={styles.video}
+              source={{ uri: embedUrl }}
+              allowsFullscreenVideo
+              javaScriptEnabled
+              mediaPlaybackRequiresUserAction={false}
+              allowsInlineMediaPlayback
+              startInLoadingState
+              renderLoading={() => (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#3B82F6" />
+                </View>
+              )}
+            />
+          </View>
+        </View>
+
+        <Text style={styles.description}>{description}</Text>
+
+        <View style={styles.pointsInfo}>
+          <Ionicons name="star" size={24} color="#FFD700" />
+          <Text style={styles.pointsText}>
+            {isRepeat ? "You've already earned points" : "Complete to earn points"}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.completeButton, watched && { backgroundColor: "#4CAF50" }]}
+          onPress={markAsWatched}
+          disabled={watched || loading}
+        >
+          <Ionicons
+            name={watched ? "checkmark-circle" : "play-circle"}
+            size={24}
+            color="#fff"
+          />
+          <Text style={styles.completeButtonText}>
+            {watched ? "Completed" : "Mark as Watched"}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.navigationButtons}>
+          <TouchableOpacity
+            style={[styles.navButton, currentIndex === 0 && styles.disabledButton]}
+            onPress={() => navigateToVideo(currentIndex - 1)}
+            disabled={currentIndex === 0}
+          >
+            <Ionicons name="arrow-back" size={24} color="#3B82F6" />
+            <Text style={styles.navButtonText}>Previous</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.navButton, currentIndex === allVideos.length - 1 && styles.disabledButton]}
+            onPress={() => navigateToVideo(currentIndex + 1)}
+            disabled={currentIndex === allVideos.length - 1}
+          >
+            <Text style={styles.navButtonText}>Next</Text>
+            <Ionicons name="arrow-forward" size={24} color="#3B82F6" />
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </View>
+  );
+};
+
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f8f9fa",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  backButton: {
+    marginRight: 16,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  content: {
+    flex: 1,
+  },
+  contentContainer: {
+    paddingBottom: 90,
+  },
+  videoContainer: {
+    width: width - 32,
+    height: (width - 32) * 0.5625,
+    backgroundColor: '#000',
+    marginVertical: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  video: {
+    flex: 1,
+    backgroundColor: '#000',
+    transform: [{ scale: 0.98 }],
+  },
+  videoWrapper: {
+    backgroundColor: '#f8f9fa',
+    padding: 16,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    alignItems: 'center',
+  },
+  description: {
+    fontSize: 16,
+    color: "#666",
+    lineHeight: 24,
+    paddingHorizontal: 16,
+    marginTop: 16,
+  },
+  completeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3B82F6",
+    borderRadius: 8,
+    padding: 16,
+    margin: 16,
+    marginTop: 24,
+  },
+  completeButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  pointsInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  pointsText: {
+    fontSize: 16,
+    color: "#666",
+    marginLeft: 8,
+  },
+  navigationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  navButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f4ff',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  navButtonText: {
+    color: '#3B82F6',
+    marginHorizontal: 8,
+    fontWeight: 'bold',
+  },
+});
+
+export default LessonDetail;
