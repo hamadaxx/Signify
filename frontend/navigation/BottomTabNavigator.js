@@ -60,8 +60,12 @@ const BottomTabNavigator = () => {
       <Tab.Screen 
         name="Learn" 
         component={UnitStack}
-        options={{
-          tabBarLabel: 'Learn',
+        options={({ route }) => {
+          const routeName = route.state?.routes[route.state.index]?.name;
+          return {
+            tabBarLabel: 'Learn',
+            tabBarVisible: routeName === 'LearnScreen',
+          };
         }}
       />
       <Tab.Screen 

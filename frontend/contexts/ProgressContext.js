@@ -16,7 +16,8 @@ export const BADGES = {
 export const POINTS = {
   DAILY_LOGIN: 5,
   LESSON_COMPLETION: 10,
-  UNIT_COMPLETION: 10
+  UNIT_COMPLETION: 10,
+  QUIZ_COMPLETION: 20
 };
 
 export const ProgressProvider = ({ children }) => {
@@ -72,7 +73,8 @@ export const ProgressProvider = ({ children }) => {
           streak: 0,
           lastLoginDate: null,
           streakFreeze: false,
-          badges: []
+          badges: [],
+          completedQuizzes: []
         };
         
         await setDoc(userRef, {
@@ -92,7 +94,8 @@ export const ProgressProvider = ({ children }) => {
           streak: 0,
           lastLoginDate: null,
           streakFreeze: false,
-          badges: []
+          badges: [],
+          completedQuizzes: []
         };
         
         setUserProgress(progress);
@@ -269,6 +272,52 @@ export const ProgressProvider = ({ children }) => {
     }
   };
 
+  const completeQuiz = async (unitId, score) => {
+    if (!user) return false;
+    
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (!userDoc.exists()) {
+        console.error('User document does not exist');
+        return false;
+      }
+      
+      const userData = userDoc.data();
+      const progress = userData.progress || {};
+      const completedQuizzes = progress.completedQuizzes || [];
+      
+      const alreadyCompleted = completedQuizzes.some(quiz => quiz.unitId === unitId);
+      
+      if (!alreadyCompleted) {
+        const newCompletedQuiz = {
+          unitId,
+          score,
+          completedAt: Timestamp.now()
+        };
+        
+        await updateDoc(userRef, {
+          'progress.completedQuizzes': [...completedQuizzes, newCompletedQuiz],
+          'progress.points': increment(POINTS.QUIZ_COMPLETION)
+        });
+        
+        setUserProgress(prev => ({
+          ...prev,
+          completedQuizzes: [...(prev?.completedQuizzes || []), newCompletedQuiz],
+          points: (prev?.points || 0) + POINTS.QUIZ_COMPLETION
+        }));
+        
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('Error completing quiz:', error);
+      return false;
+    }
+  };
+
   const isLessonCompleted = (lessonId) => {
     if (!userProgress?.completedLessons) return false;
     return userProgress.completedLessons.some(lesson => lesson.id === lessonId);
@@ -277,6 +326,17 @@ export const ProgressProvider = ({ children }) => {
   const isUnitCompleted = (unitId) => {
     if (!userProgress?.completedUnits) return false;
     return userProgress.completedUnits.includes(unitId);
+  };
+
+  const isQuizCompleted = (unitId) => {
+    if (!userProgress?.completedQuizzes) return false;
+    return userProgress.completedQuizzes.some(quiz => quiz.unitId === unitId);
+  };
+
+  const getQuizScore = (unitId) => {
+    if (!userProgress?.completedQuizzes) return null;
+    const quiz = userProgress.completedQuizzes.find(quiz => quiz.unitId === unitId);
+    return quiz ? quiz.score : null;
   };
 
   const getUnitProgress = async (unitId) => {
@@ -315,7 +375,10 @@ export const ProgressProvider = ({ children }) => {
     streakFreeze,
     awardDailyLoginBonus,
     completeLesson,
+    completeQuiz,
     isLessonCompleted,
+    isQuizCompleted,
+    getQuizScore,
     isUnitCompleted,
     getUnitProgress,
     refreshProgress

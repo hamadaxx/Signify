@@ -15,6 +15,7 @@ import { db } from "../../firebase/fbConfig";
 import { doc, updateDoc, onSnapshot, collection, query, orderBy, getDoc, getDocs } from "firebase/firestore";
 import { useProgress } from "../../contexts/ProgressContext";
 import { Timestamp } from "firebase/firestore";
+import { fetchVideos } from "../../firebase/vidServices";
 
 const { width } = Dimensions.get('window');
 
@@ -38,21 +39,15 @@ const LessonDetail = ({ route, navigation }) => {
         setIsRepeat(completed);
         setWatched(completed); // Set watched status based on user's progress
 
-        // Load all videos
-        const videosRef = collection(db, "units", unitId, "videos");
-        const q = query(videosRef, orderBy("vidOrder", "asc"));
-        const videosSnapshot = await getDocs(q);
-        
-        const videosData = videosSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        
+        // Load all videos using vidServices
+        const videosData = await fetchVideos(unitId);
         setAllVideos(videosData);
         const index = videosData.findIndex(v => v.id === videoId);
         if (index >= 0) setCurrentIndex(index);
 
         // Set up real-time listener for videos
+        const videosRef = collection(db, "units", unitId, "videos");
+        const q = query(videosRef, orderBy("vidOrder", "asc"));
         const unsubscribeVideos = onSnapshot(q, (snapshot) => {
           const updatedVideos = snapshot.docs.map(doc => ({
             id: doc.id,
@@ -119,6 +114,7 @@ const LessonDetail = ({ route, navigation }) => {
   }, [completeLesson, unitId, videoId, isLessonCompleted]);
 
   const getYouTubeVideoId = useCallback((url) => {
+    if (!url) return null;
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return (match && match[2].length === 11) ? match[2] : null;
@@ -241,7 +237,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    paddingBottom: 90,
+    paddingBottom: 120,
   },
   videoContainer: {
     width: width - 32,
@@ -295,6 +291,7 @@ const styles = StyleSheet.create({
     padding: 16,
     margin: 16,
     marginTop: 24,
+    marginBottom: 40,
   },
   completeButtonText: {
     color: "#fff",
@@ -319,6 +316,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginHorizontal: 16,
     marginTop: 16,
+    marginBottom: 40,
   },
   navButton: {
     flexDirection: 'row',

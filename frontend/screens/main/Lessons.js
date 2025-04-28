@@ -18,140 +18,123 @@ const Lessons = ({ route }) => {
   const navigation = useNavigation();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { isLessonCompleted, refreshProgress } = useProgress();
+  const { isLessonCompleted, isQuizCompleted, getQuizScore, refreshProgress } = useProgress();
 
   useEffect(() => {
     let unsubscribe;
     let mounted = true;
 
-    const loadVideos = async () => {
+    const fetchVideos = async () => {
       try {
         setLoading(true);
-        
-        // Only refresh progress if needed
         const videosRef = collection(db, "units", unitId, "videos");
         const q = query(videosRef, orderBy("vidOrder", "asc"));
         
-        // Initial load using getDocs for faster loading
-        const querySnapshot = await getDocs(q);
-        const initialVideos = querySnapshot.docs.map(doc => {
-          const videoData = doc.data();
-          const completed = isLessonCompleted(doc.id);
-          return {
-            id: doc.id,
-            ...videoData,
-            watched: completed
-          };
-        });
-        
-        if (mounted) {
-          setVideos(initialVideos);
-          setLoading(false);
-        }
-        
-        // Set up real-time listener for updates
         unsubscribe = onSnapshot(q, (snapshot) => {
           if (!mounted) return;
           
-          const updatedVideos = snapshot.docs.map(doc => {
-            const videoData = doc.data();
-            const completed = isLessonCompleted(doc.id);
-            return {
-              id: doc.id,
-              ...videoData,
-              watched: completed
-            };
-          });
+          const videosData = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }));
           
-          // Only update if there are actual changes
-          if (JSON.stringify(updatedVideos) !== JSON.stringify(videos)) {
-            setVideos(updatedVideos);
-          }
+          setVideos(videosData);
+          setLoading(false);
         });
       } catch (error) {
-        console.error("Error loading videos:", error);
-        if (mounted) {
-          setLoading(false);
-        }
+        console.error("Error fetching videos:", error);
+        setLoading(false);
       }
     };
 
-    loadVideos();
-
-    // Cleanup function
+    fetchVideos();
     return () => {
       mounted = false;
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      if (unsubscribe) unsubscribe();
     };
-  }, [unitId, isLessonCompleted]);
+  }, [unitId]);
 
-  const handleVideoPress = useCallback((video) => {
-    navigation.navigate("LessonDetail", {
-      videoId: video.id,
-      unitId,
-      videoTitle: video.title,
-      videoUrl: video.videoURL,
-      description: video.description
-    });
-  }, [navigation, unitId]);
-
-  const renderVideoItem = useCallback(({ item }) => {
+  const renderVideoItem = ({ item }) => {
+    const isCompleted = isLessonCompleted(item.id);
+    
     return (
       <TouchableOpacity
-        style={styles.videoCard}
-        onPress={() => handleVideoPress(item)}
+        style={styles.videoItem}
+        onPress={() => navigation.navigate("LessonDetail", {
+          videoId: item.id,
+          unitId,
+          videoTitle: item.title,
+          videoUrl: item.url,
+          description: item.description
+        })}
       >
-        <View style={styles.videoIconContainer}>
-          <Ionicons
-            name={item.watched ? "checkmark-circle" : "play-circle-outline"}
-            size={32}
-            color={item.watched ? "#4CAF50" : "#3B82F6"}
-          />
-        </View>
         <View style={styles.videoInfo}>
+          <Ionicons
+            name={isCompleted ? "checkmark-circle" : "play-circle"}
+            size={24}
+            color={isCompleted ? "#4CAF50" : "#3B82F6"}
+          />
           <Text style={styles.videoTitle}>{item.title}</Text>
-          <Text style={styles.videoDescription} numberOfLines={2}>
-            {item.description}
-          </Text>
         </View>
-        <Ionicons name="chevron-forward" size={24} color="#3B82F6" />
+        {isCompleted && (
+          <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+        )}
       </TouchableOpacity>
     );
-  }, [handleVideoPress]);
+  };
+
+  const handleTakeQuiz = () => {
+    navigation.navigate("quizScreen", {
+      unitId,
+      unitTitle
+    });
+  };
+
+  const isAllLessonsCompleted = videos.every(video => isLessonCompleted(video.id));
+  const quizScore = getQuizScore(unitId);
+  const hasCompletedQuiz = isQuizCompleted(unitId);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{unitTitle}</Text>
+        <Text style={styles.title}>{unitTitle}</Text>
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading lessons...</Text>
-        </View>
+        <ActivityIndicator size="large" color="#3B82F6" />
       ) : (
-        <FlatList
-          data={videos}
-          renderItem={renderVideoItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.videoList}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="videocam-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>No lessons available yet</Text>
-            </View>
-          }
-        />
+        <>
+          <FlatList
+            data={videos}
+            renderItem={renderVideoItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContainer}
+          />
+          
+          <View style={styles.quizContainer}>
+            <TouchableOpacity
+              style={[
+                styles.quizButton,
+                !isAllLessonsCompleted && styles.quizButtonDisabled
+              ]}
+              onPress={handleTakeQuiz}
+              disabled={!isAllLessonsCompleted}
+            >
+              <Ionicons name="help-circle" size={24} color="#fff" />
+              <Text style={styles.quizButtonText}>
+                {hasCompletedQuiz ? 'Retake Quiz' : 'Take Quiz'}
+              </Text>
+              {hasCompletedQuiz && (
+                <Text style={styles.quizScore}>Score: {quizScore}%</Text>
+              )}
+            </TouchableOpacity>
+            {!isAllLessonsCompleted && (
+              <Text style={styles.quizLockedText}>
+                Complete all lessons to unlock the quiz
+              </Text>
+            )}
+          </View>
+        </>
       )}
     </View>
   );
@@ -160,77 +143,73 @@ const Lessons = ({ route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#fff",
   },
   header: {
-    flexDirection: "row",
+    backgroundColor: "#ADD8E6",
+    padding: 20,
     alignItems: "center",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
   },
-  backButton: {
-    marginRight: 16,
-  },
-  headerTitle: {
-    fontSize: 18,
+  title: {
+    fontSize: 20,
     fontWeight: "bold",
     color: "#333",
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#666",
-  },
-  videoList: {
+  listContainer: {
     padding: 16,
-    paddingBottom: 90,
   },
-  videoCard: {
+  videoItem: {
     flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
     alignItems: "center",
-  },
-  videoIconContainer: {
-    marginRight: 16,
+    justifyContent: "space-between",
+    padding: 16,
+    backgroundColor: "#f8f8f8",
+    borderRadius: 10,
+    marginBottom: 10,
   },
   videoInfo: {
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
   },
   videoTitle: {
     fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 4,
-    color: "#333",
-  },
-  videoDescription: {
-    fontSize: 14,
-    color: "#666",
-  },
-  emptyContainer: {
+    marginLeft: 10,
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 40,
   },
-  emptyText: {
+  quizContainer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+    marginBottom: 60,
+  },
+  quizButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#3B82F6",
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  quizButtonDisabled: {
+    backgroundColor: "#a0c4ff",
+  },
+  quizButtonText: {
+    color: "#fff",
     fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 10,
+  },
+  quizScore: {
+    color: "#fff",
+    fontSize: 14,
+    marginLeft: 10,
+  },
+  quizLockedText: {
     color: "#666",
-    marginTop: 16,
+    fontSize: 14,
+    textAlign: "center",
   },
 });
 

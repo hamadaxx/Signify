@@ -11,6 +11,7 @@ import {
 import YoutubePlayer from 'react-native-youtube-iframe';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase/fbConfig';
+import { useProgress } from '../../contexts/ProgressContext';
 import LessonDetail from '../main/LessonDetail';
 
 const quizScreen = ({ navigation, route }) => {
@@ -21,7 +22,35 @@ const quizScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedAnswers, setSelectedAnswers] = useState({});
+  const { completeQuiz, isQuizCompleted, isLessonCompleted } = useProgress();
   
+  // Check if quiz is locked
+  useEffect(() => {
+    const checkQuizLock = async () => {
+      try {
+        const videosRef = collection(db, 'units', unitId, 'videos');
+        const videosSnapshot = await getDocs(videosRef);
+        const totalVideos = videosSnapshot.size;
+        
+        const completedVideos = videosSnapshot.docs.filter(doc => 
+          isLessonCompleted(doc.id)
+        ).length;
+        
+        if (completedVideos < totalVideos) {
+          Alert.alert(
+            'Quiz Locked',
+            'Please complete all lessons in this unit before taking the quiz.',
+            [{ text: 'OK', onPress: () => navigation.goBack() }]
+          );
+        }
+      } catch (error) {
+        console.error('Error checking quiz lock:', error);
+      }
+    };
+    
+    checkQuizLock();
+  }, [unitId, isLessonCompleted]);
+
   // Handle answer selection
   const handleAnswerSelect = (answer) => {
     setSelectedAnswer(answer);
@@ -80,17 +109,22 @@ const quizScreen = ({ navigation, route }) => {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const correctCount = questions.reduce((count, q, index) => (
       count + (selectedAnswers[index] === q.correctAnswer ? 1 : 0)
     ), 0);
-  
-    // Ensure selectedAnswers are included in the params
+    
+    const score = Math.round((correctCount / questions.length) * 100);
+    
+    // Save quiz completion
+    await completeQuiz(unitId, score);
+    
     navigation.navigate('quizResults', {
       questions,
-      selectedAnswers, // Add this line to pass the selectedAnswers data
-      score: Math.round((correctCount / questions.length) * 100),
-      unitTitle
+      selectedAnswers,
+      score,
+      unitTitle,
+      unitId
     });
   };
 
@@ -365,16 +399,19 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 8,
     alignItems: 'center',
+    
   },
   prevButton: {
     backgroundColor: '#f0f0f0',
     marginRight: 8,
+    marginBottom: 60,
   },
   nextButton: {
     backgroundColor: '#3B82F6',
   },
   disabledButton: {
     backgroundColor: '#a0c4ff',
+    
   },
   navButtonText: {
     fontWeight: 'bold',
