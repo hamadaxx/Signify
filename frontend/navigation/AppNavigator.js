@@ -17,6 +17,7 @@ import DailyChallengeScreen from '../screens/quiz/DailyChallengeScreen';
 import BottomTabNavigator from './BottomTabNavigator';
 import QuestionDetailScreen from '../components/QuestionDetailScreen';
 import PostQuestionScreen from '../components/PostQuestionScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 
 const Stack = createStackNavigator();
 
@@ -47,6 +48,7 @@ const AppNavigator = () => {
             <Stack.Screen name="QuestionDetail" component={QuestionDetailScreen} />
             <Stack.Screen name="PostQuestion" component={PostQuestionScreen} />
             <Stack.Screen name="DailyChallenge" component={DailyChallengeScreen} />
+            <Stack.Screen name="Notifications" component={NotificationsScreen} />
           </>
         )}
       </Stack.Navigator>
