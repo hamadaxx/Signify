@@ -1,0 +1,97 @@
+body {
+    background-color: #304fff; /* Blue background color */
+    font-family: "Poppins", sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+  }
+  
+  .auth-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+  }
+  
+  .auth-box {
+    background-color:  #ffb702; /* White background for the input box */
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0px 4px 25px rgba(0, 0, 0, 0.1); /* Soft shadow for depth */
+    width: 350px;
+    text-align: center;
+  }
+  
+  h2 {
+    color: #304fff;
+    font-size: 24px;
+    margin-bottom: 20px;
+  }
+  
+  input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    outline: none;
+    font-size: 16px;
+  }
+  
+  button {
+    background-color: #ffb702; /* Yellow button */
+    color: black;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    width: 100%;
+    margin-top: 10px;
+    transition: all 0.3s ease-in-out;
+  }
+  
+  button:hover {
+    background-color:#304fff;
+  }
+  
+  a {
+    color: #304fff;
+    text-decoration: none;
+    font-weight: bold;
+  }
+  
+  a:hover {
+    text-decoration: underline;
+  }
+  
+  .error {
+    color: red;
+    font-size: 12px;
+    margin-top: 5px;
+  }
+  
+  .eye-icon {
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    font-size: 20px;
+  }
+  
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
